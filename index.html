@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>hello.test</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: #380738;
+      overflow: hidden;
+      height: 100%;
+      width: 100%;
+    }
+    canvas{
+      display: block;
+      background-color: #380738;
+      width: 100vw;
+      height: 100vh;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+  </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const offCanvas = document.createElement('canvas');
+const offCtx = offCanvas.getContext('2d');
+const gap = 5; // hạt mịn hơn cho mobile
+let particles = [];
+
+// Responsive canvas
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  offCanvas.width = canvas.width;
+  offCanvas.height = canvas.height;
+}
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', resizeCanvas);
+resizeCanvas();
+
+// Lớp hạt
+class Particle{
+  constructor(x, y, tx, ty, r, color){
+    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * canvas.height;
+    this.tx = x;
+    this.ty = y;
+    this.r = r;
+    this.color = color;
+    this.hue = Math.random() * 360;
+  }
+  draw(){
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+    ctx.fillStyle = `hsl(${this.hue},100%,60%)`;
+    ctx.fill();
+  }
+  update(){
+    this.x += (this.tx - this.x)*0.08 + 0.2*Math.sin(Date.now()*0.002 + this.x);
+    this.y += (this.ty - this.y)*0.08 + 0.2*Math.cos(Date.now()*0.002 + this.x);
+    this.hue += 1.5;
+  }
+}
+
+// Vẽ chữ lên offCanvas
+function drawTextOffCanvas(text){
+  offCtx.clearRect(0,0,offCanvas.width, offCanvas.height);
+  const fontSize = Math.min(canvas.width, canvas.height)/Math.max(5, text.length/2); // tự động thu nhỏ font nếu dài
+  offCtx.font = `${fontSize}px Poppins`;
+  offCtx.fillStyle = 'blue';
+  offCtx.textAlign = 'center';
+  offCtx.textBaseline = 'middle';
+  offCtx.fillText(text, offCanvas.width/2, offCanvas.height/2);
+  return offCtx.getImageData(0,0,offCanvas.width,offCanvas.height);
+}
+
+// Tạo hạt dựa trên chữ
+function createParticles(text){
+  particles = [];
+  const imageData = drawTextOffCanvas(text);
+  const pixels = imageData.data;
+  for(let x = 0; x < offCanvas.width; x+=gap){
+    for(let y = 0; y < offCanvas.height; y+=gap){
+      const idx = (y*offCanvas.width + x)*4;
+      if(pixels[idx+3] > 128){
+        const color = `rgb(${pixels[idx]},${pixels[idx+1]},${pixels[idx+2]})`;
+        particles.push(new Particle(x,y,x,y,2,color));
+      }
+    }
+  }
+}
+
+// Animate
+function animate(){
+  ctx.fillStyle = '#380738';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(let p of particles){
+    p.update();
+    p.draw();
+  }
+  requestAnimationFrame(animate);
+}
+
+// Countdown + Happy Birthday
+const texts = ["3","2","1","Chúc Mừng Sinh Nhật Vui Vẻ Nha"];
+let i = 0;
+function nextText(){
+  if(i < texts.length){
+    createParticles(texts[i]);
+    i++;
+    setTimeout(nextText, 1000);
+  }
+}
+
+window.addEventListener('load', ()=>{
+  canvas.style.opacity = 1;
+  nextText();
+  animate();
+});
+</script>
+</body>
+</html>
