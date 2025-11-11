@@ -3,50 +3,53 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Chúc mừng sinh nhật (Particles)</title>
+  <title>Chúc mừng sinh nhật (Particles) - adaptive</title>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
   <style>
-    html,body { margin:0; height:100%; background:#380738; overflow:hidden; }
-    canvas { display:block; width:100vw; height:100vh; background:#380738; }
+    html,body{ margin:0; height:100%; background:#380738; overflow:hidden; }
+    canvas{ display:block; width:100vw; height:100vh; background:#380738; }
   </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
 
 <script>
-// canvas chính
+// canvas chính + canvas ẩn
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-
-// canvas ẩn để vẽ text và lấy pixel
 const offCanvas = document.createElement('canvas');
 const offCtx = offCanvas.getContext('2d');
 
-// cấu hình (có thể chỉnh nếu cần)
-const FINAL_TEXT = 'Chúc bà có 1\nsinh nhật thật vui vẻ nha 🎉'; // đổi lời chúc ở đây
+// cấu hình ban đầu (có thể thay)
+const FINAL_TEXT = 'Chúc bà có 1\nsinh nhật thật vui vẻ nha 🎉';
 const SEQ = [
   { text: '3', duration: 900 },
   { text: '2', duration: 900 },
   { text: '1', duration: 900 },
-  { text: FINAL_TEXT, duration: 3800 }
+  { text: FINAL_TEXT, duration: 3500 }
 ];
 
-// giới hạn hiệu năng (nhiều hạt sẽ nặng trên điện thoại yếu)
-const MAX_PARTICLES = 9000; // không cho vượt quá số này
-const START_GAP_DESKTOP = 6; // gap mặc định desktop
-const START_GAP_MOBILE = 4;  // gap mặc định mobile
-const MIN_GAP = 2;           // gap nhỏ nhất khi cần (mịn nhất, nặng nhất)
-
-// trạng thái
+// trạng thái và tham số linh hoạt
 let DPR = Math.max(window.devicePixelRatio || 1, 1);
 let cssW = window.innerWidth;
 let cssH = window.innerHeight;
-let baseGap = cssW < 600 ? START_GAP_MOBILE : START_GAP_DESKTOP;
+
+// tham số mặc định (sẽ override dựa trên đo hiệu năng)
+let GAP_DESKTOP = 6;
+let GAP_MOBILE = 4;
+let MIN_GAP = 2;
+let baseGap = cssW < 600 ? GAP_MOBILE : GAP_DESKTOP;
 let baseR = cssW < 600 ? 1.6 : 2.0;
+
+// cap mặc định (sẽ điều chỉnh)
+let MAX_PARTICLES = 5000;     // mặc định, sẽ giảm nếu máy yếu
+let ENABLE_SHADOW = true;     // tắt shadow để tăng fps trên thiết bị yếu
+
+// pool hạt
 let particles = [];
 let currentText = null;
 
-// cập nhật kích thước và scale contexts đúng DPR
+// resize & scale
 function resizeAll(){
   DPR = Math.max(window.devicePixelRatio || 1, 1);
   cssW = window.innerWidth;
@@ -60,206 +63,245 @@ function resizeAll(){
   offCanvas.width = canvas.width;
   offCanvas.height = canvas.height;
 
-  // scale contexts để dùng toạ độ CSS px trong vẽ text và tính toán
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  offCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  offCtx.setTransform(DPR,0,0,DPR,0,0);
 
-  // cập nhật gap và bán kính theo kích thước
-  baseGap = cssW < 600 ? START_GAP_MOBILE : START_GAP_DESKTOP;
+  baseGap = cssW < 600 ? GAP_MOBILE : GAP_DESKTOP;
   baseR = cssW < 600 ? 1.6 : 2.0;
 
-  // nếu đang có text, tái tạo targets cho text hiện tại
-  if (currentText !== null) {
-    drawTextParticles(currentText);
-  }
+  // nếu đang hiển thị text, tái tạo targets cho text hiện tại
+  if (currentText !== null) drawTextParticles(currentText);
 }
-window.addEventListener('resize', () => { resizeAll(); });
-window.addEventListener('orientationchange', () => { setTimeout(resizeAll, 60); });
+window.addEventListener('resize', ()=> resizeAll());
+window.addEventListener('orientationchange', ()=> setTimeout(resizeAll, 60));
 resizeAll();
 
-// lớp Particle giống cấu trúc của bạn
+// lớp Particle giống cấu trúc bạn
 class Particle {
-  constructor(x = Math.random() * cssW, y = Math.random() * cssH) {
+  constructor(x = Math.random()*cssW, y = Math.random()*cssH){
     this.x = x;
     this.y = y;
-    this.tx = x;
-    this.ty = y;
+    this.tx = x; this.ty = y;
     this.r = baseR;
     this.hue = Math.random() * 360;
   }
-  update() {
-    const ease = 0.09; // độ mượt khi tiến về target
-    const osc = cssW < 600 ? 0.07 : 0.12; // dao động nhỏ cho đẹp
-    this.x += (this.tx - this.x) * ease + osc * Math.sin((Date.now() * 0.0013) + this.x);
-    this.y += (this.ty - this.y) * ease + osc * Math.cos((Date.now() * 0.0013) + this.y);
-    this.hue = (this.hue + 0.9) % 360;
+  update(){
+    const ease = 0.09;
+    const osc = cssW < 600 ? 0.07 : 0.12;
+    this.x += (this.tx - this.x)*ease + osc*Math.sin((Date.now()*0.0013)+this.x);
+    this.y += (this.ty - this.y)*ease + osc*Math.cos((Date.now()*0.0013)+this.y);
+    this.hue = (this.hue + 0.8) % 360;
   }
-  draw() {
+  draw(){
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
     ctx.fillStyle = `hsl(${this.hue},85%,60%)`;
-    ctx.shadowColor = 'rgba(255,255,255,0.16)';
-    ctx.shadowBlur = 6;
+    if (ENABLE_SHADOW) {
+      ctx.shadowColor = 'rgba(255,255,255,0.14)';
+      ctx.shadowBlur = 6;
+    }
     ctx.fill();
-    ctx.shadowBlur = 0;
+    if (ENABLE_SHADOW) ctx.shadowBlur = 0;
   }
 }
 
-// lấy list target (CSS px) từ text
-// chú ý: vẽ text lên offCanvas (đã scale), nhưng sample theo CSS px rồi map sang device pixel index
-function getTargetsFromText(text) {
-  // chu kỳ: thử với gap start, nếu target quá ít -> giảm gap và thử lại, tối thiểu MIN_GAP
+// Hàm lấy targets từ text (sampling) - vẫn scale đúng DPR
+function getTargetsFromText(text, desiredMax){
   const cssWidth = offCanvas.width / DPR;
   const cssHeight = offCanvas.height / DPR;
 
-  // auto compute fontSize theo kích thước và độ dài text
+  // font size adaptive
   const lines = text.split('\n');
-  let fontSize = Math.floor(Math.min(cssWidth, cssHeight) / Math.max(4, text.length / 3));
+  let fontSize = Math.floor(Math.min(cssWidth, cssHeight) / Math.max(4, text.length/3));
   fontSize = Math.max(fontSize, 10);
 
-  // bắt đầu với gapCandidate = baseGap
+  // start gap, sẽ giảm nếu thiếu điểm
   let gapCandidate = baseGap;
   let targets = [];
 
-  while (true) {
-    // clear và vẽ text
-    offCtx.clearRect(0, 0, offCanvas.width, offCanvas.height);
-    offCtx.fillStyle = '#ffffff';
+  // lặp: sample với gapCandidate, nếu quá ít target => giảm gapCandidate (tăng chi tiết)
+  while(true){
+    offCtx.clearRect(0,0, offCanvas.width, offCanvas.height);
+    offCtx.fillStyle = '#fff';
     offCtx.textAlign = 'center';
     offCtx.textBaseline = 'middle';
     offCtx.font = `${fontSize}px Poppins`;
-
     const lineH = fontSize * 1.12;
-    const startY = cssHeight / 2 - ((lines.length - 1) * lineH / 2);
-
-    for (let i = 0; i < lines.length; i++) {
-      offCtx.fillText(lines[i], cssWidth / 2, startY + i * lineH);
+    const startY = cssHeight/2 - ((lines.length - 1) * lineH / 2);
+    for (let i=0;i<lines.length;i++){
+      offCtx.fillText(lines[i], cssWidth/2, startY + i*lineH);
     }
 
-    // lấy pixel data (device pixels)
-    const img = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height).data;
+    const img = offCtx.getImageData(0,0, offCanvas.width, offCanvas.height).data;
     targets = [];
-
-    // sample theo CSS coords, sau đó map sang device pixels để truy xuất index
-    for (let y = 0; y < cssHeight; y += gapCandidate) {
-      for (let x = 0; x < cssWidth; x += gapCandidate) {
+    // sample theo CSS coords, map to device pixel index
+    for (let y = 0; y < cssHeight; y += gapCandidate){
+      for (let x = 0; x < cssWidth; x += gapCandidate){
         const xi = Math.floor(x * DPR);
         const yi = Math.floor(y * DPR);
         const idx = (yi * offCanvas.width + xi) * 4;
-        if (img[idx + 3] > 128) {
-          targets.push({ x: x, y: y });
-        }
+        if (img[idx + 3] > 128) targets.push({ x:x, y:y });
       }
     }
 
-    // điều kiện dừng:
-    // - đủ target (>= 120) OR gapCandidate đã nhỏ tới MIN_GAP
-    if (targets.length >= 120 || gapCandidate <= MIN_GAP) break;
-    // nếu targets quá ít, giảm gapCandidate để lấy chi tiết hơn
-    gapCandidate = Math.max(MIN_GAP, Math.floor(gapCandidate * 0.7));
+    // dừng khi đạt đủ hoặc gap đã nhỏ nhất
+    if (targets.length >= Math.max(120, desiredMax/3) || gapCandidate <= MIN_GAP) break;
+    gapCandidate = Math.max(MIN_GAP, Math.floor(gapCandidate * 0.65));
   }
 
-  // nếu targets vẫn quá ít (vd: text quá nhỏ), tăng font size 1.25 lần và sample thêm 1 lần
-  if (targets.length < 60 && fontSize < Math.min(cssWidth, cssHeight) / 2) {
-    fontSize = Math.floor(fontSize * 1.25);
-    offCtx.clearRect(0, 0, offCanvas.width, offCanvas.height);
-    offCtx.font = `${fontSize}px Poppins`;
-    const lineH2 = fontSize * 1.12;
-    const startY2 = cssHeight / 2 - ((lines.length - 1) * lineH2 / 2);
-    for (let i = 0; i < lines.length; i++) {
-      offCtx.fillText(lines[i], cssWidth / 2, startY2 + i * lineH2);
-    }
-    const img2 = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height).data;
-    targets = [];
-    for (let y = 0; y < cssHeight; y += Math.max(MIN_GAP, 2)) {
-      for (let x = 0; x < cssWidth; x += Math.max(MIN_GAP, 2)) {
-        const xi = Math.floor(x * DPR);
-        const yi = Math.floor(y * DPR);
+  // nếu targets vẫn ít (ví dụ trên mobile), bổ sung từ opaque pixels (chi tiết cao hơn)
+  if (targets.length < Math.min(200, desiredMax/2)){
+    const imgFull = offCtx.getImageData(0,0, offCanvas.width, offCanvas.height).data;
+    const opaque = [];
+    for (let yi=0; yi < offCanvas.height; yi++){
+      for (let xi=0; xi < offCanvas.width; xi++){
         const idx = (yi * offCanvas.width + xi) * 4;
-        if (img2[idx + 3] > 128) {
-          targets.push({ x: x, y: y });
-        }
+        if (imgFull[idx + 3] > 128) opaque.push({ xi, yi });
       }
+    }
+    // muốn thêm đến desiredMax
+    const need = Math.min(desiredMax, Math.floor((cssWidth * cssHeight) / (baseGap * baseGap)));
+    const toAdd = Math.max(0, need - targets.length);
+    for (let k=0; k<toAdd && opaque.length>0; k++){
+      const r = Math.floor(Math.random() * opaque.length);
+      const p = opaque[r];
+      const xCss = Math.max(0, Math.min(cssWidth-1, p.xi / DPR + (Math.random()-0.5)*baseGap*0.6));
+      const yCss = Math.max(0, Math.min(cssHeight-1, p.yi / DPR + (Math.random()-0.5)*baseGap*0.6));
+      targets.push({ x: xCss, y: yCss });
     }
   }
 
+  // cắt targets nếu vượt desiredMax
+  if (targets.length > desiredMax) targets = targets.slice(0, desiredMax);
   return targets;
 }
 
-// apply targets cho particle pool (không pop targets)
-function applyTargets(targets) {
-  // giới hạn tối đa particle để tránh lag nặng
+// Ánh xạ targets -> particles, tạo lượng particle vừa phải
+function applyTargets(targets){
   const needed = Math.min(targets.length, MAX_PARTICLES);
-  if (particles.length < needed) {
-    const toCreate = needed - particles.length;
-    for (let i = 0; i < toCreate; i++) {
-      particles.push(new Particle(Math.random() * cssW, Math.random() * cssH));
+  if (particles.length < needed){
+    const create = needed - particles.length;
+    for (let i=0;i<create;i++){
+      particles.push(new Particle(Math.random()*cssW, Math.random()*cssH));
     }
   }
-  // shuffle targets nhẹ để tránh pattern lặp (visual)
-  // (sử dụng Fisher-Yates)
-  for (let i = targets.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [targets[i], targets[j]] = [targets[j], targets[i]];
-  }
-  // gán target cho particle (chỉ gán tới số particle hiện có)
-  for (let i = 0; i < particles.length; i++) {
-    if (i < targets.length) {
+  // gán target (không shuffle nặng để tiết kiệm)
+  for (let i=0;i<particles.length;i++){
+    if (i < targets.length){
       particles[i].tx = targets[i].x;
       particles[i].ty = targets[i].y;
       particles[i].r = baseR;
     } else {
-      // particle dư di chuyển rải rác
-      particles[i].tx = Math.random() * cssW;
-      particles[i].ty = Math.random() * cssH;
-      particles[i].r = baseR * 0.9;
+      particles[i].tx = Math.random()*cssW;
+      particles[i].ty = Math.random()*cssH;
+      particles[i].r = baseR*0.9;
     }
   }
 }
 
-// draw text bằng hạt (cập nhật currentText)
-function drawTextParticles(text) {
+// hàm chính vẽ text bằng hạt (với desiredMax = mức tối đa mong muốn cho chữ đó)
+function drawTextParticles(text, desiredMax){
   currentText = text;
-  const targets = getTargetsFromText(text);
+  // getTargetsFromText tự đảm bảo sampling phù hợp
+  const targets = getTargetsFromText(text, desiredMax);
   applyTargets(targets);
 }
 
 // animate loop
-let lastTs = performance.now();
-function animate(ts) {
-  const dt = ts - lastTs; lastTs = ts;
-
+let last = performance.now();
+function animate(now){
+  const dt = now - last; last = now;
   ctx.fillStyle = '#380738';
-  ctx.fillRect(0, 0, cssW, cssH);
-
-  for (let p of particles) {
+  ctx.fillRect(0,0, cssW, cssH);
+  for (let p of particles){
     p.update();
     p.draw();
   }
-
   requestAnimationFrame(animate);
 }
 
-// run sequence async (để dễ control chuỗi)
-async function runSequence(seq) {
-  for (let i = 0; i < seq.length; i++) {
-    drawTextParticles(seq[i].text);
-    await sleep(seq[i].duration);
+// helper: đo khả năng (hardwareConcurrency + đo FPS trong 500ms)
+async function detectCapability(){
+  // 1) cores
+  const cores = navigator.hardwareConcurrency || 2;
+  // basic heuristic by cores & mobile
+  const isMobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent);
+  // set baseline
+  if (isMobile){
+    MAX_PARTICLES = Math.max(2000, Math.min(5000, cores * 800)); // mobile -> 1600~4000
+    baseGap = GAP_MOBILE;
+    ENABLE_SHADOW = false;
+  } else {
+    MAX_PARTICLES = Math.max(4000, Math.min(9000, cores * 1500)); // desktop
+    baseGap = GAP_DESKTOP;
+    ENABLE_SHADOW = true;
+  }
+
+  // 2) đo FPS thực tế trong 600ms (khởi động nhẹ)
+  const measureMs = 600;
+  let frames = 0;
+  let t0 = performance.now();
+  await new Promise(res => {
+    function step(t){
+      frames++;
+      if (t - t0 < measureMs) requestAnimationFrame(step);
+      else res();
+    }
+    requestAnimationFrame(step);
+  });
+  const elapsed = performance.now() - t0;
+  const fps = frames / (elapsed / 1000);
+
+  // adjust based on fps
+  if (fps < 20){
+    // máy yếu => giảm nhiều
+    MAX_PARTICLES = Math.max(1000, Math.floor(MAX_PARTICLES * 0.35));
+    baseGap = Math.max(baseGap, 6);
+    ENABLE_SHADOW = false;
+  } else if (fps < 30){
+    MAX_PARTICLES = Math.max(2000, Math.floor(MAX_PARTICLES * 0.6));
+    baseGap = Math.max(baseGap, 5);
+    ENABLE_SHADOW = false;
+  } else if (fps < 45){
+    MAX_PARTICLES = Math.max(3000, Math.floor(MAX_PARTICLES * 0.8));
+    baseGap = Math.max(baseGap, 4);
+    ENABLE_SHADOW = true;
+  } else {
+    // máy khỏe
+    MAX_PARTICLES = Math.min(MAX_PARTICLES, Math.floor(MAX_PARTICLES * 1));
+    baseGap = Math.max(2, baseGap);
+    ENABLE_SHADOW = true;
+  }
+
+  // log để debug (bỏ hoặc giữ)
+  console.log('capability:', { cores, isMobile, fps: Math.round(fps), MAX_PARTICLES, baseGap, ENABLE_SHADOW });
+}
+
+// chạy sequence async
+async function runSequence(seq){
+  // detect capability trước khi render chữ lớn
+  await detectCapability();
+
+  for (let i=0;i<seq.length;i++){
+    // desiredMax = tỉ lệ dựa trên MAX_PARTICLES và bước (số nhỏ cho 3/2/1, lớn cho final)
+    const desiredMax = seq[i].text.length <= 2 ? Math.floor(Math.min(600, MAX_PARTICLES * 0.12)) : Math.floor(MAX_PARTICLES * 0.9);
+    drawTextParticles(seq[i].text, desiredMax);
+    // đợi duration
+    await new Promise(r => setTimeout(r, seq[i].duration));
   }
 }
-function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 
-// start
+// bắt đầu
 requestAnimationFrame(animate);
 
-window.addEventListener('load', () => {
-  // vẽ số 3 trước, delay nhỏ rồi chạy full sequence
-  drawTextParticles('3');
-  setTimeout(() => runSequence(SEQ), 300);
+// khi load: hiển thị '3' rồi chạy full sequence
+window.addEventListener('load', ()=>{
+  drawTextParticles('3', Math.floor(Math.min(400, MAX_PARTICLES * 0.12)));
+  setTimeout(()=> runSequence(SEQ), 300);
 });
 
-// resize handler: resizeAll sẽ gọi drawTextParticles(currentText)
-window.addEventListener('resize', () => { resizeAll(); });
+// resize handler
+window.addEventListener('resize', ()=> resizeAll());
 </script>
 </body>
 </html>
