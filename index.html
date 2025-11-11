@@ -8,21 +8,22 @@
   <style>
     html,body{ margin:0; height:100%; background:#380738; overflow:hidden; }
     canvas{ display:block; width:100vw; height:100vh; background:#380738; }
-    /* thêm font Poppins từ Google Fonts */
   </style>
 </head>
 <body>
-  <canvas id="canvas"></canvas>
+<canvas id="canvas"></canvas>
 
 <script>
-// canvas chính
+//canvas chính
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 //canvas ẩn (canvas test)
 const offCanvas = document.createElement('canvas');
 const offCtx = offCanvas.getContext('2d');
-//màn hình tỉ lệ cao
+
+//tỉ lệ màn hình
 let DPR = window.devicePixelRatio || 1;
+
 //cập nhật kích thước canvas
 function resizeAll(){
   DPR = window.devicePixelRatio || 1;
@@ -30,10 +31,10 @@ function resizeAll(){
   canvas.height = Math.floor(window.innerHeight * DPR);
   canvas.style.width = window.innerWidth + 'px';
   canvas.style.height = window.innerHeight + 'px';
+
   offCanvas.width = canvas.width;
   offCanvas.height = canvas.height;
 
-  // scale theo DPR
   ctx.setTransform(DPR,0,0,DPR,0,0);
   offCtx.setTransform(DPR,0,0,DPR,0,0);
 }
@@ -41,140 +42,136 @@ window.addEventListener('resize', resizeAll);
 window.addEventListener('orientationchange', resizeAll);
 resizeAll();
 
-// mảng hạt
+//particles để lưu trữ các hạt
 let particles = [];
-const gap = 6; // khoảng cách của các hạt(càng nhỏ càng lag)
-const baseR = 2; // kích thước hạt
+const gap = 5; //khoảng cách giữa hạt
+const baseR = 2; //bán kính hạt
+
 //lớp hạt
-class Particle {
-  constructor(x= Math.random()*canvas.width/DPR, y= Math.random()*canvas.height/DPR){
+class Particle{
+  constructor(x=Math.random()*canvas.width/DPR, y=Math.random()*canvas.height/DPR){
     this.x = x;
     this.y = y;
-    this.tx = x;
-    this.ty = y;
+    this.tx = x; //tọa độ mục tiêu x
+    this.ty = y; //tọa độ mục tiêu y
     this.r = baseR;
     this.hue = Math.random()*360;
-    // vị trí ban đầu để di chuyển ngẫu nhiên
-    this.vx = (Math.random()-0.5)*2;
-    this.vy = (Math.random()-0.5)*2;
   }
-  update(dt){
-    // dao động điều hòa theo công thức x = x0 + A*sin(wt + phi)
-    const ease = 0.08;
-    this.x += (this.tx - this.x)*ease + 0.2*Math.sin(Date.now()*0.002 + this.x);
-    this.y += (this.ty - this.y)*ease + 0.2*Math.cos(Date.now()*0.002 + this.y);
-    this.hue = (this.hue + 1.2) % 360;
-  }
+  //vẽ
   draw(){
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
     ctx.fillStyle = `hsl(${this.hue},90%,60%)`;
-    // small glow
     ctx.shadowColor = 'rgba(255,255,255,0.25)';
     ctx.shadowBlur = 6;
     ctx.fill();
     ctx.shadowBlur = 0;
   }
+  //cập nhật vị trí
+  update(){
+    const ease = 0.08; //tốc độ di chuyển về mục tiêu
+    this.x += (this.tx - this.x)*ease + 0.2*Math.sin(Date.now()*0.002 + this.x);
+    this.y += (this.ty - this.y)*ease + 0.2*Math.cos(Date.now()*0.002 + this.y);
+    this.hue = (this.hue + 1.2) % 360;
+  }
 }
 
-// hàm lấy tọa độ các điểm từ text
+//hàm lấy tọa độ các điểm từ text
 function getTargetsFromText(text){
-  // vẽ text lên offCanvas 
+  //vẽ text lên offCanvas
   const maxSide = Math.min(window.innerWidth, window.innerHeight);
-  // font size ước lượng theo độ dài text
   const approxLen = Math.max(6, text.length);
   const fontSize = Math.floor(maxSide / Math.max(4, approxLen/3));
+
   offCtx.clearRect(0,0, offCanvas.width, offCanvas.height);
   offCtx.fillStyle = '#ffffff';
   offCtx.textAlign = 'center';
   offCtx.textBaseline = 'middle';
   offCtx.font = `${fontSize}px Poppins`;
 
-  // xuống dòng nếu có '\n'
+  //xuống dòng nếu có '\n'
   const lines = text.split('\n');
   const lh = fontSize * 1.15;
-  const startY = (offCanvas.height / DPR) / 2 - ( (lines.length-1) * lh / 2 );
+  const startY = (offCanvas.height / DPR)/2 - ((lines.length-1) * lh /2);
   for(let i=0;i<lines.length;i++){
     offCtx.fillText(lines[i], (offCanvas.width/DPR)/2, startY + i*lh);
   }
 
-  // lấy dữ liệu hình ảnh trên offCanvas
+  //lấy dữ liệu pixel
   const img = offCtx.getImageData(0,0, offCanvas.width, offCanvas.height).data;
   const targets = [];
   const w = offCanvas.width / DPR;
   const h = offCanvas.height / DPR;
-  for(let y = 0; y < h; y += gap){
-    for(let x = 0; x < w; x += gap){
+  for(let y=0;y<h;y+=gap){
+    for(let x=0;x<w;x+=gap){
       const xi = Math.floor(x*DPR);
       const yi = Math.floor(y*DPR);
-      const idx = (yi * (offCanvas.width) + xi) * 4;
-      if(img[idx+3] > 128){
-        targets.push({ x: x, y: y });
+      const idx = (yi*(offCanvas.width) + xi)*4;
+      if(img[idx+3]>128){
+        targets.push({x:x, y:y});
       }
     }
   }
   return targets;
 }
 
-// hàm áp dụng tọa độ mục tiêu cho các hạt
+//áp dụng tọa độ mục tiêu cho các hạt
 function applyTargets(targets){
-  // thêm hạt nếu chưa đủ
   if(particles.length < targets.length){
     const need = targets.length - particles.length;
     for(let i=0;i<need;i++){
-      // sinh hạt mới ở vị trí ngẫu nhiên
       particles.push(new Particle(Math.random()*canvas.width/DPR, Math.random()*canvas.height/DPR));
     }
   }
-  // cập nhật tọa độ mục tiêu cho các hạt
   for(let i=0;i<particles.length;i++){
-    if(i < targets.length){
+    if(i<targets.length){
       particles[i].tx = targets[i].x;
       particles[i].ty = targets[i].y;
       particles[i].r = baseR;
-    } else {
-      // di chuyển hạt thừa ra ngoài màn hình
+    }else{
       particles[i].tx = Math.random()*canvas.width/DPR;
       particles[i].ty = Math.random()*canvas.height/DPR;
-      particles[i].r = baseR * 0.9;
+      particles[i].r = baseR*0.9;
     }
   }
 }
 
-// hàm chính để vẽ text dưới dạng hạt
+//vẽ text bằng hạt
 function drawTextParticles(text){
   const targets = getTargetsFromText(text);
   applyTargets(targets);
 }
 
-//lặp lại hàm animate
+//hàm animate
 let last = performance.now();
 function animate(now){
   const dt = now - last;
   last = now;
-  // xóa background
+
   ctx.fillStyle = '#380738';
   ctx.fillRect(0,0, canvas.width/DPR, canvas.height/DPR);
 
   for(let p of particles){
-    p.update(dt);
+    p.update();
     p.draw();
   }
+
   requestAnimationFrame(animate);
 }
 
-//bộ đếm ngược và câu chúc
+//chuỗi bộ đếm và text chúc mừng
 const sequence = [
-  { text: '3', duration: 1000 },
-  { text: '2', duration: 1000 },
-  { text: '1', duration: 1000 },
-  { text: 'Chúc bà có 1\nsinh nhật thật vui vẻ nha 🎉', duration: 3500 }
+  {text:'3', duration:1000},
+  {text:'2', duration:1000},
+  {text:'1', duration:1000},
+  {text:'Chúc bà có 1\nsinh nhật thật vui vẻ nha 🎉', duration:3500}
 ];
 
+//chạy chuỗi bộ đếm và text
 function runSequence(seq){
-  let i = 0;
+  let i=0;
   function next(){
-    if(i >= seq.length) return;
+    if(i>=seq.length) return;
     drawTextParticles(seq[i].text);
     setTimeout(()=>{
       i++;
@@ -184,18 +181,17 @@ function runSequence(seq){
   next();
 }
 
-// khởi động hoạt ảnh
+//khởi động animate
 requestAnimationFrame(animate);
-window.addEventListener('load', ()=> {
-  // vẽ số "3" ban đầu
+
+//sau load trang, vẽ số 3 ban đầu rồi chạy chuỗi
+window.addEventListener('load', ()=>{
   drawTextParticles('3');
-  // cho delay trước khi chạy chuỗi
   setTimeout(()=> runSequence(sequence), 350);
 });
-// xử lý khi thay đổi kích thước cửa sổ
-window.addEventListener('resize', ()=>{
-  resizeAll();
-});
+
+//xử lý khi resize
+window.addEventListener('resize', ()=>{ resizeAll(); });
 </script>
 </body>
 </html>
